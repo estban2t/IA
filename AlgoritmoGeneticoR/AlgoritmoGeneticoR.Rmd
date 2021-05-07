@@ -1,0 +1,136 @@
+---
+title: "Práctica: Algoritmo Genético Simple"
+author: "Ingeniería Electrónica - Inteligencia Artificial"
+date: "21/04/2021"
+output: 
+  html_document: 
+    toc: true # table of content true
+---
+
+```{r warning=FALSE, message=FALSE,echo=FALSE}
+rm(list=ls())   # borrar todo lo que esté en memoria
+
+#Instalar librerias necesarias
+if(!require(knitr)){install.packages("knitr")} #compilar en html
+if(!require(rmdformats)){install.packages("rmdformats")}#compilar en html
+if(!require(ggplot2)){install.packages("ggplot2")}
+if(!require(genalg)){install.packages("genalg")}
+
+library(knitr)
+library(rmdformats)
+library(genalg)
+library(ggplot2)
+
+
+# Opciones globales
+
+ options(max.print="75")
+ opts_chunk$set(message=FALSE,
+                warning=FALSE)
+  opts_knit$set(width=75)
+```
+
+
+**Tutorial básico de R [aquí](https://bookdown.org/chescosalgado/intro_r/)**
+
+En esta práctica, se revisa la implementación de una algoritmo de optimización metaheurístico: un algortimo genético.
+
+Un **algoritmo genético** (GA) es una técnica de optimización y búsqueda basada en los principios de **Genética y Selección Natural**. Con frecuencia se usa para encontrar soluciones óptimas o casi óptimas para problemas difíciles que de otra manera tomarían mucho tiempo en resolverse. Se utiliza con frecuencia para resolver problemas de optimización, en investigación y machine learning.
+
+GA genera una población, los individuos en esta población (a menudo llamados cromosomas) tienen un estado dado. Una vez que se genera la población, el estado de estos individuos se evalúa y califica según su valor. Los mejores individuos son luego tomados y cruzados, con el objetivo de generar "mejores" descendientes, para formar la nueva población. En algunos casos, los mejores individuos de la población se preservan para garantizar "buenos individuos" en la nueva generación.
+
+Para explicar esto, Usaremos una versión del [problema de la mochila](https://es.wikipedia.org/wiki/Problema_de_la_mochila).
+
+Suponer que vas a pasar un mes en el desierto y llevarás una mochila contigo. Sin embargo, el peso máximo que puede llevar es de 20 kilogramos. Tienes una cantidad de elementos de supervivencia disponibles, cada uno con su propio número de "puntos de supervivencia". Tu objetivo es maximizar el número de puntos de supervivencia.
+
+La siguiente tabla muestra los elementos que puede elegir.
+
+|ARTÍCULO| PUNTOS DE SUPERVIVENCIA| PESO|
+|--------|------------------------|-----|
+|navaja de bolsillo| 10.00| 1.00 |
+|frijoles| 20.00| 5.00|
+|papas| 15.00| 10.00| 
+|uniones| 2.00| 1.00|
+|bolsa de dormir| 30.00| 7.00|
+|cuerda| 10.00 |5.00| 
+|brújula| 30.00| 1.00|
+
+# Configurar conjunto de datos
+```{r}
+library(genalg)
+library(ggplot2)
+
+dataset <- data.frame(articulo = c("navaja de bolsillo", 
+                                   "frijoles", 
+                                   "papas", 
+                                   "uniones",
+                                   "bolsa de dormir", 
+                                   "cuerda", 
+                                   "brújula"), 
+                      puntos_supervivencia = c(10, 20, 15, 2, 30, 10, 30), 
+                      peso = c(1, 5, 10, 1, 7, 5, 1))
+peso_limite <- 20
+
+dataset
+```
+
+# Configurar la función de aptitud
+## Ejemplo
+
+Antes de crear el modelo, tenemos que configurar una función de aptitud o evaluación (*fitness function*). La función de aptitud evaluará a los diferentes individuos (cromosomas) de la población en función del valor de su configuración génica.
+
+Por ejemplo, un individuo puede tener la siguiente configuración de genes: 1001100.
+
+Cada número en esta cadena binaria representa si llevar o no un artículo. Un valor de 1 se refiere a poner el artículo específico en la mochila, mientras que un 0 se refiere a dejar el artículo en casa. Dado el ejemplo de configuración genética, tomaríamos los siguientes elementos;
+
+Podemos revisar los puntos de supervicencia que se suman con esta configuración. Esto dará un valor a la configuración del gen de un cromosoma dado. Esto es justamente lo que hace la función de aptitud en este caso.
+
+```{r}
+cromosoma = c(1, 0, 0, 1, 1, 0, 0)
+dataset[cromosoma == 1, ]
+```
+```{r}
+cat(cromosoma %*% dataset$puntos_supervivencia)
+```
+
+## Función para nuestro problema de la mochila
+En un GA, tenemos un grupo o una población de posibles soluciones para el problema dado. Estas soluciones se someten a cruce y mutación (como en la genética natural), produciendo nuevos descendientes, y el proceso se repite a lo largo de varias generaciones. A cada individuo (o solución candidata) se le asigna un valor de aptitud (basado en su valor de función objetivo) y los individuos más aptos tienen una mayor oportunidad de reproducirse y generar más individuos "más aptos". Esto está en línea con la teoría darwiniana de "supervivencia del más apto".
+
+El algoritmo `rbga.bin`(ver más abajo) del paquete `genalg` intenta optimizar hacia el valor mínimo. Por lo tanto, el valor se calcula como se vio anteriormente y se multiplica por -1. Si se excede la restricción del peso, devuelve un valor de 0 (también se podría dar un valor más alto).
+```{r}
+evalFunc <- function(x) {
+    actual_solucion_puntos <- x %*% dataset$puntos_supervivencia
+    actual_solucion_peso <- x %*% dataset$peso
+
+    if (actual_solucion_peso > peso_limite) 
+        return(0) else return(-actual_solucion_puntos)
+}
+```
+
+# Ejecutar el modelo
+A continuación, elegimos el número de iteraciones, diseñamos y ejecutamos el modelo.
+```{r}
+iter = 100
+GAmodel <- rbga.bin(size = 7, popSize = 200, iters = iter, mutationChance = 0.01,  elitism = T, evalFunc = evalFunc)
+plot(GAmodel)
+```
+```{r}
+plot(GAmodel,type = "hist")
+```
+
+# Encontrar la mejor solución
+Significa la mejor solución es: 1 1 0 1 1 1 1
+
+Se encuentra que la mejor solución es `1111101`. Esto nos indicar llevar los siguientes artículos con nosotros en nuestro viaje a la naturaleza.
+```{r}
+solucion = c(1, 1,0, 1, 1, 1, 1)
+dataset[solucion == 1, ] 
+```
+Esto a su vez nos da el número total de puntos de supervivencia.
+
+# Solución vs disponible
+```{r}
+cat(paste(solucion %*% dataset$puntos_supervivencia, "/", sum(dataset$puntos_supervivencia)))
+```
+
+En diferentes campos, hay un gran conjunto de problemas que, incluso teniendo los sistemas informáticos más potentes, tardan mucho tiempo (¡incluso años!) en resolver esos problema. En esos casos, los GA demuestran ser una herramienta eficiente para proporcionar soluciones utilizables casi óptimas (factibles) en un corto período de tiempo.
